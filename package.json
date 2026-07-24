@@ -1,0 +1,31 @@
+{
+  "name": "cv-wizard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^16.2.11",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.3",
+    "zustand": "^5.0.4",
+    "zod": "^4.4.3",
+    "playwright": "^1.61.1",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^7.0.0",
+    "sharp": "^0.35.3",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/markdown-it": "^14.1.0"
+  }
+}

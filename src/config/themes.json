@@ -1,0 +1,56 @@
+{
+  "themes": [
+    {
+      "id": "monochrome",
+      "name": "黑白经典",
+      "cssVariables": {
+        "--primary": "#1f2937",
+        "--secondary": "#6b7280",
+        "--bg": "#ffffff",
+        "--bg-secondary": "#f9fafb",
+        "--accent": "#374151",
+        "--font-heading": "'Noto Sans SC', 'PingFang SC', sans-serif",
+        "--font-body": "'Noto Sans SC', 'PingFang SC', sans-serif"
+      }
+    },
+    {
+      "id": "teal-business",
+      "name": "青蓝商务",
+      "cssVariables": {
+        "--primary": "#0d9488",
+        "--secondary": "#14b8a6",
+        "--bg": "#ffffff",
+        "--bg-secondary": "#f0fdfa",
+        "--accent": "#115e59",
+        "--font-heading": "'Noto Sans SC', 'PingFang SC', sans-serif",
+        "--font-body": "'Noto Sans SC', 'PingFang SC', sans-serif"
+      }
+    },
+    {
+      "id": "indigo-tech",
+      "name": "靛蓝科技",
+      "cssVariables": {
+        "--primary": "#4f46e5",
+        "--secondary": "#6366f1",
+        "--bg": "#ffffff",
+        "--bg-secondary": "#eef2ff",
+        "--accent": "#4338ca",
+        "--font-heading": "'Noto Sans SC', 'PingFang SC', sans-serif",
+        "--font-body": "'Noto Sans SC', 'PingFang SC', sans-serif"
+      }
+    },
+    {
+      "id": "warm-elegant",
+      "name": "暖棕雅致",
+      "cssVariables": {
+        "--primary": "#78350f",
+        "--secondary": "#92400e",
+        "--bg": "#fffbeb",
+        "--bg-secondary": "#fef3c7",
+        "--accent": "#451a03",
+        "--font-heading": "'Noto Sans SC', 'PingFang SC', sans-serif",
+        "--font-body": "'Noto Sans SC', 'PingFang SC', sans-serif"
+      }
+    }
+  ]
+}

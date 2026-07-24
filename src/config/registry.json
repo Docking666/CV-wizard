@@ -1,0 +1,28 @@
+{
+  "templates": [
+    {
+      "id": "classic-single-col",
+      "name": "Classic 经典",
+      "component": "ClassicTemplate",
+      "atsScore": 95
+    },
+    {
+      "id": "modern-dual-col",
+      "name": "Modern 现代",
+      "component": "ModernTemplate",
+      "atsScore": 80
+    },
+    {
+      "id": "creative-aside",
+      "name": "Creative 创意",
+      "component": "CreativeTemplate",
+      "atsScore": 60
+    },
+    {
+      "id": "academic-paper",
+      "name": "Academic 学术",
+      "component": "AcademicTemplate",
+      "atsScore": 88
+    }
+  ]
+}
