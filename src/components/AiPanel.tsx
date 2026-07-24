@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 
 const DIMENSION_LABELS: Record<string, string> = {
@@ -29,6 +29,7 @@ export function AiPanel() {
   const [rewriteProgress, setRewriteProgress] = useState(0);
   const [rewriteTotal, setRewriteTotal] = useState(0);
   const [localError, setLocalError] = useState<string | null>(null);
+  const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
   const handleAnalyzeJD = useCallback(async () => {
     if (!jdInput.trim()) return;
@@ -85,6 +86,7 @@ export function AiPanel() {
     backupOriginal();
     setAiAction("rewriting");
     setLocalError(null);
+    abortRef.current = { cancelled: false };
 
     const work = resumeData.work || [];
     setRewriteTotal(work.length);
@@ -92,6 +94,8 @@ export function AiPanel() {
 
     try {
       for (let i = 0; i < work.length; i++) {
+        if (abortRef.current.cancelled) break;
+
         setRewriteProgress(i + 1);
         const item = work[i];
         if (!item.highlights || item.highlights.length === 0) continue;
@@ -105,15 +109,25 @@ export function AiPanel() {
           }),
         });
 
+        if (abortRef.current.cancelled) break;
+
         const data = await res.json();
         if (data.success && data.data?.rewritten_highlights) {
           adaptedWork[i] = { ...item, highlights: data.data.rewritten_highlights };
         }
       }
 
-      setResumeData({ ...resumeData, work: adaptedWork });
+      if (abortRef.current.cancelled) {
+        setLocalError("已取消适配");
+      } else {
+        setResumeData({ ...resumeData, work: adaptedWork });
+      }
     } catch {
-      setLocalError("简历适配请求失败");
+      if (abortRef.current.cancelled) {
+        setLocalError("已取消适配");
+      } else {
+        setLocalError("简历适配请求失败");
+      }
     } finally {
       setAiAction("idle");
       setRewriteProgress(0);
@@ -191,11 +205,24 @@ export function AiPanel() {
       </div>
 
       {isRewriting && (
-        <div className="w-full bg-gray-200 rounded-full h-1.5">
-          <div
-            className="bg-rose-500 h-1.5 rounded-full transition-all"
-            style={{ width: `${rewriteTotal > 0 ? (rewriteProgress / rewriteTotal) * 100 : 0}%` }}
-          />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-gray-500">
+              适配中 {rewriteProgress}/{rewriteTotal}...
+            </span>
+            <button
+              onClick={() => { abortRef.current.cancelled = true; }}
+              className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition"
+            >
+              取消适配
+            </button>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div
+              className="bg-rose-500 h-1.5 rounded-full transition-all"
+              style={{ width: `${rewriteTotal > 0 ? (rewriteProgress / rewriteTotal) * 100 : 0}%` }}
+            />
+          </div>
         </div>
       )}
 

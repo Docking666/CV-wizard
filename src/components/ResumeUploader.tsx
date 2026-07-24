@@ -47,7 +47,7 @@ const MAX_SIZE = 10 * 1024 * 1024;
 type UploadStatus = "idle" | "uploading" | "parsing" | "done" | "error";
 
 export function ResumeUploader() {
-  const { setResumeData, setError, setJsonInput } = useAppStore();
+  const { setResumeData, setJsonInput } = useAppStore();
 
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
@@ -73,13 +73,11 @@ export function ResumeUploader() {
       if (validationError) {
         setStatus("error");
         setErrorMsg(validationError);
-        setError(validationError);
         return;
       }
 
       lastFileRef.current = file;
       setFileName(file.name);
-      setError(null);
       setStatus("uploading");
 
       try {
@@ -100,21 +98,18 @@ export function ResumeUploader() {
           setResumeData(resume);
           setJsonInput(JSON.stringify(resume, null, 2));
           setStatus("done");
-          setError(null);
         } else {
           const msg = data.error || "简历解析失败，请重试";
           setStatus("error");
           setErrorMsg(msg);
-          setError(msg);
         }
       } catch {
         const msg = "网络错误，请检查连接后重试";
         setStatus("error");
         setErrorMsg(msg);
-        setError(msg);
       }
     },
-    [validateFile, setResumeData, setError, setJsonInput],
+    [validateFile, setResumeData, setJsonInput],
   );
 
   const handleFiles = useCallback(
@@ -173,21 +168,19 @@ export function ResumeUploader() {
   const handleRetry = useCallback(() => {
     setStatus("idle");
     setErrorMsg("");
-    setError(null);
     if (lastFileRef.current) {
       uploadAndParse(lastFileRef.current);
     } else {
       openFilePicker();
     }
-  }, [uploadAndParse, openFilePicker, setError]);
+  }, [uploadAndParse, openFilePicker]);
 
   const handleClear = useCallback(() => {
     setStatus("idle");
     setErrorMsg("");
     setFileName("");
-    setError(null);
     lastFileRef.current = null;
-  }, [setError]);
+  }, []);
 
   const isProcessing = status === "uploading" || status === "parsing";
 

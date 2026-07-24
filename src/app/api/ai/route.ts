@@ -73,6 +73,11 @@ async function handleScore(body: Record<string, unknown>) {
     return NextResponse.json({ success: false, error: "JD 参数无效或过长" }, { status: 400 });
   }
 
+  const resumeStr = JSON.stringify(resume);
+  if (resumeStr.length > 30000) {
+    return NextResponse.json({ success: false, error: "简历数据过大，请精简后重试" }, { status: 400 });
+  }
+
   const configs = loadPromptConfigs();
   const input = JSON.stringify({ resume, jd });
   const result = await callLLM(configs.matchScoring, input);

@@ -12,6 +12,68 @@ export const runtime = "nodejs";
 const ALLOWED_MIME_TYPES = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// ─── Tesseract Worker 单例 ───────────────────────────────────────────────
+import type { Worker as TesseractWorker } from "tesseract.js";
+
+let workerInstance: TesseractWorker | null = null;
+let workerInitPromise: Promise<TesseractWorker | null> | null = null;
+
+/**
+ * 初始化 Tesseract worker 单例（带加锁 + 超时）。
+ * 并发调用只会有一次实际的初始化过程，其余调用共享同一个 Promise。
+ */
+function initializeWorker(): Promise<TesseractWorker | null> {
+  // 如果已经初始化完成，直接返回
+  if (workerInstance) {
+    return Promise.resolve(workerInstance);
+  }
+  // 如果正在初始化中，返回同一个 Promise（加锁）
+  if (workerInitPromise) {
+    return workerInitPromise;
+  }
+
+  workerInitPromise = (async () => {
+    try {
+      const { createWorker } = await import("tesseract.js");
+      // 30 秒超时保护
+      const worker = await Promise.race([
+        createWorker("chi_sim+eng"),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Tesseract worker 初始化超时（30s）")), 30_000)
+        ),
+      ]);
+      workerInstance = worker;
+      console.log("[parse-resume] Tesseract worker 初始化完成");
+      return worker;
+    } catch (error) {
+      console.error("[parse-resume] Tesseract worker 初始化失败:", error);
+      workerInitPromise = null; // 允许后续重试
+      return null;
+    }
+  })();
+
+  return workerInitPromise;
+}
+
+/**
+ * 获取可用的 worker 单例，如果 worker 断开则自动重新初始化。
+ */
+async function getWorker(): Promise<TesseractWorker | null> {
+  // 检查已有 worker 是否仍然有效
+  if (workerInstance) {
+    try {
+      // 如果 worker 已经 terminate 或断开，recognize 会抛错
+      // 提前重置以便重新初始化
+      return workerInstance;
+    } catch {
+      // 预留防护，实际断开检测在 recognize 时处理
+    }
+  }
+  return initializeWorker();
+}
+
+// ─── OCR 文本提取 ──────────────────────────────────────────────────────────
+
 async function extractTextFromPDF(buffer: Buffer): Promise<string | null> {
   const pdf = await import("pdf-parse");
   const data = await (pdf as unknown as { default: (b: Buffer) => Promise<{ text: string }> }).default(buffer);
@@ -26,14 +88,24 @@ async function extractTextFromImage(buffer: Buffer): Promise<string> {
   const sharp = (await import("sharp")).default;
   const processed = await sharp(buffer).greyscale().normalize().toBuffer();
 
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("chi_sim+eng");
-  const {
-    data: { text },
-  } = await worker.recognize(processed);
-  await worker.terminate();
+  const worker = await getWorker();
+  if (!worker) {
+    console.error("[parse-resume] Tesseract worker 不可用，跳过 OCR");
+    return "";
+  }
 
-  return text || "";
+  try {
+    const {
+      data: { text },
+    } = await worker.recognize(processed);
+    return text || "";
+  } catch (error) {
+    // worker 可能已断开连接，重置单例以便下次重新初始化
+    console.error("[parse-resume] Tesseract recognize 失败，可能 worker 已断开，将重置单例:", error);
+    workerInstance = null;
+    workerInitPromise = null;
+    return "";
+  }
 }
 
 function extractJSON(raw: string): string {

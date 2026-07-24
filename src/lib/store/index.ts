@@ -100,7 +100,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   restoreOriginal: () => {
     const original = get().originalResumeData;
-    if (original) set({ resumeData: original });
+    if (original) {
+      set({
+        resumeData: original,
+        jdAnalysis: null,
+        matchScore: null,
+      });
+    }
   },
 
   selectedTemplateId: "classic-single-col",
