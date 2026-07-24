@@ -3,8 +3,24 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { execFile } from "child_process";
+import { readFile, writeFile, unlink, mkdtemp } from "fs/promises";
+import { join, dirname } from "path";
+import { tmpdir } from "os";
+import { fileURLToPath } from "url";
 import { loadPromptConfigs, callLLM } from "@/lib/llm-service";
 import { validateResume } from "@/lib/schemas/resume";
+
+/** 显式解析 tesseract worker script 路径（绕过 Turbopack __dirname 错误映射） */
+function resolveTesseractWorkerPath(): string {
+  try {
+    const tesseractPkg = require.resolve("tesseract.js/package.json");
+    return join(dirname(tesseractPkg), "src", "worker-script", "node", "index.js");
+  } catch {
+    // 降级路径
+    return join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js");
+  }
+}
 
 export const maxDuration = 120;
 export const runtime = "nodejs";
@@ -35,9 +51,11 @@ function initializeWorker(): Promise<TesseractWorker | null> {
   workerInitPromise = (async () => {
     try {
       const { createWorker } = await import("tesseract.js");
-      // 30 秒超时保护
+      // 30 秒超时保护；显式指定 workerPath 绕过 Turbopack 路径映射
       const worker = await Promise.race([
-        createWorker("chi_sim+eng"),
+        createWorker("chi_sim+eng", 1, {
+          workerPath: resolveTesseractWorkerPath(),
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("Tesseract worker 初始化超时（30s）")), 30_000)
         ),
@@ -73,6 +91,66 @@ async function getWorker(): Promise<TesseractWorker | null> {
 }
 
 // ─── OCR 文本提取 ──────────────────────────────────────────────────────────
+
+/**
+ * 扫描型 PDF → OCR 文本提取
+ * 流程：pdftoppm 转 PNG → Tesseract OCR
+ * 支持多页 PDF，自动拼接各页文本
+ */
+async function ocrFromScannedPDF(pdfBuffer: Buffer): Promise<string> {
+  const tmpDir = await mkdtemp(join(tmpdir(), "resume-pdf-"));
+  try {
+    const pdfPath = join(tmpDir, "input.pdf");
+    await writeFile(pdfPath, pdfBuffer);
+
+    // 使用 pdftoppm 将 PDF 转为 PNG（-png 输出，-r 200 DPI，-lang en 避免中文路径问题）
+    await execFilePromise("pdftoppm", ["-png", "-r", "200", pdfPath, join(tmpDir, "page")]);
+
+    // 找到所有生成的 PNG 页面
+    const fs = await import("fs/promises");
+    const files = await fs.readdir(tmpDir);
+    const pageFiles = files.filter((f) => f.endsWith(".png")).sort();
+
+    if (pageFiles.length === 0) {
+      throw new Error("pdftoppm 未生成任何图片，请确认 poppler-utils 已安装");
+    }
+
+    // 逐页 OCR 并拼接
+    const pageTexts: string[] = [];
+    for (const pageFile of pageFiles) {
+      const pageBuffer = await fs.readFile(join(tmpDir, pageFile));
+      const pageText = await extractTextFromImage(pageBuffer);
+      if (pageText.trim()) {
+        pageTexts.push(pageText.trim());
+      }
+    }
+
+    return pageTexts.join("\n\n");
+  } finally {
+    // 清理临时文件
+    try {
+      const fs = await import("fs/promises");
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    } catch {
+      // 忽略清理失败
+    }
+  }
+}
+
+/**
+ * execFile 的 Promise 包装（避免回调地狱）
+ */
+function execFilePromise(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { timeout: 30000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${cmd} 执行失败: ${stderr || error.message}`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string | null> {
   const pdf = await import("pdf-parse");
@@ -163,18 +241,14 @@ export async function POST(request: NextRequest) {
       if (pdfText) {
         text = pdfText;
       } else {
-        // 扫描型 PDF：尝试用 sharp + OCR 降级处理（需要系统安装 libvips-poppler）
+        // 扫描型 PDF：使用 pdftoppm（poppler-utils）转为图片后 OCR
         try {
-          const sharp = (await import("sharp")).default;
-          // sharp 仅在编译时启用了 poppler 支持时才能读取 PDF
-          const pdfBuffer = await sharp(buffer, { pages: 1, density: 150 }).png().toBuffer();
-          text = await extractTextFromImage(pdfBuffer);
-        } catch {
+          text = await ocrFromScannedPDF(buffer);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "扫描 PDF 处理失败";
+          console.error("[parse-resume] 扫描 PDF OCR 失败:", err);
           return NextResponse.json(
-            {
-              success: false,
-              error: "该 PDF 为扫描型（无文字层），服务器缺少 PDF 转图片依赖（libvips-poppler / poppler-utils）。请尝试上传图片格式，或使用文本版 PDF。",
-            },
+            { success: false, error: `该 PDF 为扫描型（无文字层），${msg}` },
             { status: 422 }
           );
         }
